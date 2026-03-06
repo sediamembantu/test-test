@@ -377,11 +377,84 @@ The demo proves you can execute. The roadmap proves you can lead.
 
 ## 12. Stretch Goals (If Time Permits)
 
-- Streamlit UI wrapping the agent pipeline
 - Side-by-side comparison of two deal sites (Kulai vs Cyberjaya risk profiles)
 - Integration with Malaysia's SSM company registry (MYDATA) for entity verification
 - Cost-of-risk calculation: estimated insurance premium uplift due to flood exposure
 - Carbon footprint estimate based on TNB grid emission factor × projected power consumption
+
+---
+
+## 14. Vercel Web Demo (Priority Feature)
+
+**Goal:** Live web demo at a single Vercel URL — user clicks "Run Analysis", watches pipeline process step-by-step, then views the map and memo in-browser.
+
+### Architecture
+
+```
+Vercel (single deploy)
+├── web/index.html         — Plain HTML/JS frontend, no framework
+├── api/index.py           — FastAPI app (Vercel Python serverless)
+│   └── GET /run           — SSE endpoint: streams pipeline steps live
+└── vercel.json            — Routes: /api/* → Python, /* → static web/
+```
+
+### User Flow
+
+1. Page loads with "Run Analysis" button (pre-loaded Nusantara Digital PDF)
+2. Click → SSE stream opens, steps appear one by one in terminal-style log:
+   ```
+   ✓ Step 1/7 — Parsing deal document...
+   ✓ Step 2/7 — Geocoding: Kulai (1.6580, 103.6000) [fallback]
+   ⚠ Step 3/7 — Flood risk: Kulai HIGH (RP100=1.5m)
+   ⚠ Step 4/7 — Biodiversity: Kulai flagged (4.2km from wetlands)
+   ✓ Step 5/7 — Transition risk: Data Centre → High
+   ✓ Step 6/7 — Map generated
+   ✓ Step 7/7 — Memo generated
+   ```
+3. Results appear below: tabs for **[ Map ]** and **[ Memo ]**
+   - Map tab: folium HTML embedded in iframe
+   - Memo tab: rendered HTML memo inline
+
+### Key Technical Decisions
+
+| Decision | Choice | Reason |
+|----------|--------|--------|
+| Backend framework | FastAPI | SSE support, Vercel Python runtime compatible |
+| Streaming | Server-Sent Events (SSE) | Simple, no websocket overhead, works in plain HTML |
+| Frontend | Plain HTML/JS | No build step, no framework, instant deploy |
+| Heavy deps (rasterio, geopandas) | Excluded from web deploy | All tools use fallbacks — not needed at runtime |
+| PDF | Pre-bundled in repo | Demo must never fail on upload issues |
+
+### New Files Required
+
+```
+web/
+└── index.html             — Frontend UI
+api/
+└── index.py               — FastAPI SSE endpoint
+requirements-web.txt       — Slim deps for Vercel (no rasterio/geopandas)
+vercel.json                — Routing config
+```
+
+### Dependencies (requirements-web.txt)
+
+```
+fastapi
+uvicorn
+pymupdf
+folium
+shapely
+pydantic
+jinja2
+requests
+markdown
+sse-starlette
+python-multipart
+```
+
+### Demo Script Integration
+
+The Vercel URL replaces the terminal screen-record for the demo. Show the browser instead — more polished, shareable after the interview.
 
 ---
 
