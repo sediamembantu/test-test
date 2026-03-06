@@ -2,7 +2,7 @@
 
 **Company:** Nusantara Digital Sdn Bhd
 
-**Generated:** 2026-03-06 19:45
+**Generated:** 2026-03-06 20:28
 
 ---
 
@@ -18,11 +18,17 @@ This memo presents a climate-integrated due diligence assessment for Nusantara D
 | Metric | Value |
 |--------|-------|
 
-| Valuation | RM 2800.0M |
+| company_registration | 202401012345 |
 
-| Deal Type | Primary Equity Investment |
+| headquarters | Kuala Lumpur, Malaysia |
 
-| Target IRR | 12-15% |
+| deal_type | Primary Equity Investment |
+
+| valuation_myr | 2800.0 |
+
+| target_irr | 12-15% |
+
+| financials | {'revenue_myr': [180.0, 420.0, 680.0, 950.0], 'ebitda_myr': [72.0, 185.0, 310.0, 450.0], 'capex_myr': [800.0, 650.0, 400.0, 300.0]} |
 
 
 
@@ -117,8 +123,6 @@ This memo presents a climate-integrated due diligence assessment for Nusantara D
 The following ESG disclosure gaps were identified:
 
 
-<div class="esg-gap">⚠️ Scope 2 emissions not disclosed</div>
-
 <div class="esg-gap">⚠️ Water usage reporting vague ('industry standard')</div>
 
 <div class="esg-gap">⚠️ Renewable energy plan aspirational, not committed</div>
@@ -136,7 +140,7 @@ The following ESG disclosure gaps were identified:
 
 <li>Kulai Campus: High flood risk</li>
 
-<li>High transition risk sector</li>
+<li>Kulai Campus: Near protected area (4.2km)</li>
 
 </ul>
 </div>

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CADI - Climate-Aware Deal Intelligence</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            padding: 30px 0;
+            border-bottom: 1px solid #333;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            font-size: 2em;
+            color: #4a9eff;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #888;
+            font-size: 0.9em;
+        }
+        
+        .terminal {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 0.85em;
+            line-height: 1.6;
+        }
+        
+        .terminal-line {
+            margin-bottom: 5px;
+        }
+        
+        .terminal-line.success { color: #4ade80; }
+        .terminal-line.warning { color: #fbbf24; }
+        .terminal-line.error { color: #ef4444; }
+        .terminal-line.info { color: #60a5fa; }
+        
+        .btn {
+            background: #4a9eff;
+            color: #0a0a0a;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1em;
+            font-family: inherit;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            display: block;
+            margin: 0 auto 30px;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover { background: #6bb3ff; transform: translateY(-2px); }
+        .btn:disabled { background: #555; color: #888; cursor: not-allowed; transform: none; }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #333;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            color: #888;
+            font-family: inherit;
+            font-size: 0.9em;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .tab:hover { color: #e0e0e0; }
+        .tab.active { color: #4a9eff; border-bottom-color: #4a9eff; }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        #map-container, #memo-container {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            min-height: 400px;
+        }
+        
+        #map-container iframe, #memo-container iframe {
+            width: 100%;
+            height: 500px;
+            border: none;
+        }
+        
+        #memo-content {
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .summary-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .summary-card h3 {
+            color: #4a9eff;
+            margin-bottom: 15px;
+        }
+        
+        .summary-card table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .summary-card td {
+            padding: 8px 0;
+            border-bottom: 1px solid #333;
+        }
+        
+        .summary-card td:first-child {
+            color: #888;
+            width: 40%;
+        }
+        
+        .risk-high { color: #ef4444; font-weight: bold; }
+        .risk-low { color: #4ade80; }
+        .risk-medium { color: #fbbf24; }
+        
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            h1 { font-size: 1.5em; }
+            .terminal { height: 200px; font-size: 0.75em; }
+            .btn { padding: 12px 30px; }
+            .tab { padding: 10px 16px; font-size: 0.85em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚔️ CADI - Climate-Aware Deal Intelligence</h1>
+            <p class="subtitle">Agentic Due Diligence Pipeline for Private Markets</p>
+        </header>
+        
+        <button id="analyse-btn" class="btn" onclick="runAnalysis()">▶ Analyse Deal</button>
+        
+        <div id="terminal" class="terminal">
+            <div class="terminal-line info">$ Ready. Click "Analyse Deal" to start.</div>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('summary')">Summary</button>
+            <button class="tab" onclick="switchTab('map')">Map</button>
+            <button class="tab" onclick="switchTab('memo')">Memo</button>
+        </div>
+        
+        <div id="summary-tab" class="tab-content active">
+            <div class="summary-card">
+                <h3>Deal Overview</h3>
+                <table>
+                    <tr><td>Company</td><td id="company-name">—</td></tr>
+                    <tr><td>Sector</td><td id="sector">—</td></tr>
+                    <tr><td>Assets</td><td id="assets-count">—</td></tr>
+                </table>
+            </div>
+            
+            <div class="summary-card">
+                <h3>Risk Assessment</h3>
+                <table id="risk-table">
+                    <tr><td>Physical Risk</td><td id="physical-risk">—</td></tr>
+                    <tr><td>Transition Risk</td><td id="transition-risk">—</td></tr>
+                    <tr><td>Biodiversity</td><td id="biodiversity-risk">—</td></tr>
+                </table>
+            </div>
+            
+            <div class="summary-card">
+                <h3>⚠️ ESG Gaps</h3>
+                <ul id="esg-gaps" style="margin-left: 20px; color: #fbbf24;"></ul>
+            </div>
+            
+            <div class="summary-card">
+                <h3>🚩 Red Flags</h3>
+                <ul id="red-flags" style="margin-left: 20px; color: #ef4444;"></ul>
+            </div>
+        </div>
+        
+        <div id="map-tab" class="tab-content">
+            <div id="map-container">
+                <p style="padding: 20px; color: #888;">Run analysis to generate map...</p>
+            </div>
+        </div>
+        
+        <div id="memo-tab" class="tab-content">
+            <div id="memo-container">
+                <p style="padding: 20px; color: #888;">Run analysis to generate memo...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let isRunning = false;
+        
+        function log(message, type = 'info') {
+            const terminal = document.getElementById('terminal');
+            const line = document.createElement('div');
+            line.className = `terminal-line ${type}`;
+            line.textContent = `> ${message}`;
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+        
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+        
+        async function runAnalysis() {
+            if (isRunning) return;
+            
+            const btn = document.getElementById('analyse-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Running...';
+            isRunning = true;
+            
+            // Clear terminal
+            document.getElementById('terminal').innerHTML = '';
+            log('Starting CADI pipeline...', 'info');
+            
+            try {
+                const response = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+                                
+                                if (data.error) {
+                                    log(`Error: ${data.error}`, 'error');
+                                } else if (data.message) {
+                                    const type = data.message.includes('⚠️') ? 'warning' : 
+                                                data.message.includes('✓') ? 'success' : 'info';
+                                    log(data.message, type);
+                                }
+                                
+                                if (data.done && data.summary) {
+                                    updateSummary(data.summary);
+                                    displayMap(data.map_html);
+                                    displayMemo(data.memo_html);
+                                    log('✓ Pipeline complete!', 'success');
+                                }
+                            } catch (e) {
+                                // Skip malformed JSON
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+            }
+            
+            btn.disabled = false;
+            btn.textContent = '▶ Analyse Deal';
+            isRunning = false;
+        }
+        
+        function updateSummary(summary) {
+            document.getElementById('company-name').textContent = summary.company_name;
+            document.getElementById('assets-count').textContent = summary.assets;
+            document.getElementById('sector').textContent = 'Data Centre / Digital Infrastructure';
+            
+            const floodRisk = summary.flood_risks.join(', ');
+            const physicalRiskEl = document.getElementById('physical-risk');
+            physicalRiskEl.textContent = floodRisk;
+            physicalRiskEl.className = floodRisk.includes('High') ? 'risk-high' : 
+                                       floodRisk.includes('Low') ? 'risk-low' : 'risk-medium';
+            
+            const transitionRiskEl = document.getElementById('transition-risk');
+            transitionRiskEl.textContent = summary.transition_risk;
+            transitionRiskEl.className = summary.transition_risk === 'High' ? 'risk-high' : 
+                                          summary.transition_risk === 'Low' ? 'risk-low' : 'risk-medium';
+            
+            const esgList = document.getElementById('esg-gaps');
+            esgList.innerHTML = summary.esg_gaps.map(g => `<li>${g}</li>`).join('');
+            
+            const flagsList = document.getElementById('red-flags');
+            flagsList.innerHTML = summary.red_flags.map(f => `<li>${f}</li>`).join('');
+        }
+        
+        function displayMap(html) {
+            const container = document.getElementById('map-container');
+            const iframe = document.createElement('iframe');
+            iframe.srcdoc = html;
+            container.innerHTML = '';
+            container.appendChild(iframe);
+        }
+        
+        function displayMemo(html) {
+            const container = document.getElementById('memo-container');
+            const iframe = document.createElement('iframe');
+            iframe.srcdoc = html;
+            container.innerHTML = '';
+            container.appendChild(iframe);
+        }
+    </script>
+</body>
+</html>

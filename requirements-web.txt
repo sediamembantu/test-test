@@ -1,0 +1,16 @@
+# CADI Web Layer - Slim requirements for Vercel deployment
+# Excludes heavy geospatial deps (rasterio, geopandas) - uses fallback logic
+
+fastapi>=0.109.0
+uvicorn>=0.27.0
+sse-starlette>=2.0.0
+pymupdf>=1.24.0
+folium>=0.16.0
+shapely>=2.0.0
+pydantic>=2.0.0
+jinja2>=3.1.0
+requests>=2.31.0
+markdown>=3.5.0
+python-multipart>=0.0.6
+fpdf2>=2.7.0
+anthropic>=0.40.0
