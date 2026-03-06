@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import time
 
+import requests
+
 from ..schemas import GeocodeInput, GeocodeOutput
 
 # Hardcoded fallback coordinates for known Malaysian locations
@@ -56,8 +58,6 @@ def geocode_address(input_data: GeocodeInput) -> GeocodeOutput:
 
     # Try Nominatim API
     try:
-        import requests
-
         # Rate limit: 1 request per second
         time.sleep(1.1)
 
