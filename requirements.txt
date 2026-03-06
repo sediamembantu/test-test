@@ -1,9 +1,6 @@
 # CADI - Climate-Aware Deal Intelligence
 # Core dependencies
 
-# LLM / Agent
-anthropic>=0.40.0
-
 # PDF parsing
 pymupdf>=1.24.0
 fpdf2>=2.7.0  # PDF generation
@@ -14,9 +11,6 @@ geopandas>=0.14.0
 shapely>=2.0.0
 pyproj>=3.6.0
 folium>=0.16.0
-
-# NER (optional - Claude can do NER via prompting)
-# spacy>=3.7.0
 
 # Report generation
 python-docx>=1.1.0
