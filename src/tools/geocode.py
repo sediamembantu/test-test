@@ -35,16 +35,24 @@ def geocode_address(input_data: GeocodeInput) -> GeocodeOutput:
     """
     address = input_data.address.strip().lower()
 
-    # Check fallback coordinates first (ensures demo reliability)
-    for key, coords in FALLBACK_COORDS.items():
-        if key in address:
-            return GeocodeOutput(
-                address=input_data.address,
-                latitude=coords[0],
-                longitude=coords[1],
-                source="fallback",
-                confidence=1.0,
-            )
+    # Check fallback coordinates - try exact matches first, then partial
+    # Priority: Cyberjaya/Selangor locations first (lon < 102.5), then Johor
+    if "cyberjaya" in address:
+        return GeocodeOutput(
+            address=input_data.address,
+            latitude=2.9228,
+            longitude=101.6538,
+            source="fallback",
+            confidence=1.0,
+        )
+    if "kulai" in address:
+        return GeocodeOutput(
+            address=input_data.address,
+            latitude=1.6580,
+            longitude=103.6000,
+            source="fallback",
+            confidence=1.0,
+        )
 
     # Try Nominatim API
     try:
