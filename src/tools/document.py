@@ -73,7 +73,8 @@ def parse_document(input_data: ParseDocumentInput) -> ParseDocumentOutput:
 
 
 def _extract_company_name(text: str) -> str:
-    match = re.search(r"([A-Z][A-Za-z\s]+Sdn\.?\s*Bhd\.?)", text)
+    # Match "Xxx Yyy Sdn Bhd" on a single line — spaces only, no newlines
+    match = re.search(r"([A-Z][A-Za-z]+(?:[ ]+[A-Za-z]+)+[ ]+Sdn\.?[ ]*Bhd\.?)", text)
     if match:
         return match.group(1).strip()
     return "Nusantara Digital Sdn Bhd"
