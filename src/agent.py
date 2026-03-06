@@ -1,5 +1,5 @@
 """
-CADI Agent - Main orchestration loop using Claude API tool-calling.
+CADI Agent - Fixed sequential pipeline (no external API required).
 """
 
 from __future__ import annotations
@@ -10,12 +10,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from anthropic import Anthropic
 from rich.console import Console
 from rich.panel import Panel
 
 from .schemas import (
-    Asset,
     BiodiversityInput,
     FloodRiskInput,
     GeocodeInput,
@@ -36,256 +34,238 @@ from .tools import (
 
 console = Console()
 
-# System prompt for the agent
-SYSTEM_PROMPT = """You are CADI, a Climate-Aware Deal Intelligence agent.
 
-Your role is to analyze private equity deal documents and produce climate-integrated due diligence assessments.
-
-## Workflow
-
-1. Parse the deal PDF to extract company info, assets, and financials
-2. For each physical asset:
-   - Geocode the address to get coordinates
-   - Assess flood risk using JRC data
-   - Check proximity to protected areas
-3. Assess transition risk for the company's sector
-4. Identify ESG gaps and red flags
-5. Generate an interactive map
-6. Produce a structured due diligence memo
-
-## Tool Selection Logic
-
-- Start with parse_document to understand the deal
-- If physical assets found → geocode each, then assess climate risks
-- If no physical assets → skip climate layer, focus on transition risk
-- Always check for ESG disclosure gaps
-
-## Output
-
-Provide a concise summary of findings after tool execution.
-
-## Important
-
-- All data is fictional for demo purposes
-- If a tool fails, note the issue and continue with available information
-- Be thorough but efficient - this is a 2-minute demo
-"""
-
-# Tool definitions for Claude API
-TOOL_DEFINITIONS = [
-    {
-        "name": "parse_document",
-        "description": "Parse a PDF deal document and extract key information",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "pdf_path": {"type": "string", "description": "Path to PDF file"}
-            },
-            "required": ["pdf_path"],
-        },
-    },
-    {
-        "name": "geocode_address",
-        "description": "Convert an address to latitude/longitude coordinates",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "address": {"type": "string", "description": "Address to geocode"}
-            },
-            "required": ["address"],
-        },
-    },
-    {
-        "name": "assess_flood_risk",
-        "description": "Assess flood risk at a location using JRC flood maps",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "latitude": {"type": "number", "description": "Latitude coordinate"},
-                "longitude": {"type": "number", "description": "Longitude coordinate"},
-                "asset_name": {"type": "string", "description": "Name of asset"},
-            },
-            "required": ["latitude", "longitude", "asset_name"],
-        },
-    },
-    {
-        "name": "assess_transition_risk",
-        "description": "Assess transition risk for a sector using NGFS scenarios",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "sector": {"type": "string", "description": "Industry sector"},
-                "subsector": {"type": "string", "description": "Subsector (optional)"},
-            },
-            "required": ["sector"],
-        },
-    },
-    {
-        "name": "check_biodiversity",
-        "description": "Check proximity to protected areas",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "latitude": {"type": "number", "description": "Latitude coordinate"},
-                "longitude": {"type": "number", "description": "Longitude coordinate"},
-                "asset_name": {"type": "string", "description": "Asset name"},
-            },
-            "required": ["latitude", "longitude", "asset_name"],
-        },
-    },
-    {
-        "name": "generate_map",
-        "description": "Generate an interactive map with asset markers",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "assets": {"type": "array", "description": "List of assets with coordinates"},
-                "flood_data": {"type": "boolean", "description": "Include flood overlay"},
-                "output_path": {"type": "string", "description": "Output HTML path"},
-            },
-            "required": ["assets"],
-        },
-    },
-    {
-        "name": "generate_report",
-        "description": "Generate the final due diligence memo",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "company_name": {"type": "string"},
-                "deal_overview": {"type": "object"},
-                "assets": {"type": "array"},
-                "flood_risks": {"type": "array"},
-                "transition_risk": {"type": "object"},
-                "esg_gaps": {"type": "array", "items": {"type": "string"}},
-                "red_flags": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["company_name"],
-        },
-    },
-]
-
-# Tool implementation mapping
-TOOLS: dict[str, callable] = {
-    "parse_document": lambda args: parse_document(ParseDocumentInput(**args)).model_dump(),
-    "geocode_address": lambda args: geocode_address(GeocodeInput(**args)).model_dump(),
-    "assess_flood_risk": lambda args: assess_flood_risk(FloodRiskInput(**args)).model_dump(),
-    "assess_transition_risk": lambda args: assess_transition_risk(TransitionRiskInput(**args)).model_dump(),
-    "check_biodiversity": lambda args: check_biodiversity(BiodiversityInput(**args)).model_dump(),
-    "generate_map": lambda args: generate_map(MapInput(**args)).model_dump(),
-    "generate_report": lambda args: generate_report(ReportInput(**args)).model_dump(),
-}
-
-
-def run_agent(pdf_path: str, output_dir: str, dry_run: bool = False) -> dict[str, Any]:
+def run_agent(pdf_path: str, output_dir: str) -> dict[str, Any]:
     """
-    Run the CADI agent on a deal document.
+    Run the CADI pipeline on a deal document.
+
+    Executes tools in fixed sequence:
+      parse → geocode → flood risk → biodiversity → transition risk → map → report
 
     Args:
         pdf_path: Path to the deal PDF
         output_dir: Directory for outputs
-        dry_run: If True, don't execute tools (for testing)
 
     Returns:
-        Dictionary with agent results
+        Dictionary with pipeline results
     """
-    console.print(Panel.fit("⚔️ CADI - Climate-Aware Deal Intelligence", style="bold blue"))
+    console.print(Panel.fit("CADI - Climate-Aware Deal Intelligence", style="bold blue"))
 
-    client = Anthropic()
-    messages: list[dict] = []
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
 
-    # Initial message with PDF path
-    user_message = f"""Analyze this deal document and produce a climate-integrated due diligence assessment.
-
-Document path: {pdf_path}
-
-Output directory: {output_dir}
-
-Follow the workflow: parse → geocode assets → assess risks → generate map and report.
-"""
-
-    messages.append({"role": "user", "content": user_message})
-
-    # Agent loop
-    collected_results: dict[str, Any] = {
+    results: dict[str, Any] = {
         "start_time": datetime.now().isoformat(),
-        "tool_calls": [],
-        "findings": {},
+        "steps": [],
     }
 
-    while True:
-        console.print("\n[cyan]→ Calling Claude...[/cyan]")
+    # -------------------------------------------------------------------------
+    # Step 1: Parse document
+    # -------------------------------------------------------------------------
+    console.print("\n[cyan]Step 1/7 — Parsing deal document...[/cyan]")
+    doc = parse_document(ParseDocumentInput(pdf_path=pdf_path))
+    console.print(f"  Company: [bold]{doc.company_name}[/bold]")
+    console.print(f"  Sector:  {doc.sector}")
+    console.print(f"  Assets:  {len(doc.assets)} found")
+    results["steps"].append({"step": "parse_document", "company": doc.company_name})
 
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            tools=TOOL_DEFINITIONS,
-            messages=messages,
+    # -------------------------------------------------------------------------
+    # Step 2: Geocode each asset
+    # -------------------------------------------------------------------------
+    console.print("\n[cyan]Step 2/7 — Geocoding asset locations...[/cyan]")
+    geocoded_assets = []
+
+    for asset in doc.assets:
+        geo = geocode_address(GeocodeInput(address=asset.address))
+        geocoded = asset.model_copy(update={"latitude": geo.latitude, "longitude": geo.longitude})
+        geocoded_assets.append(geocoded)
+        console.print(
+            f"  {asset.name}: {geo.latitude:.4f}, {geo.longitude:.4f} [{geo.source}]"
         )
 
-        # Check stop reason
-        if response.stop_reason == "end_turn":
-            # Agent is done
-            console.print("\n[green]✓ Agent complete[/green]")
-            break
+    if not geocoded_assets:
+        geocoded_assets = doc.assets
 
-        # Process tool calls
-        assistant_content = []
-        tool_results = []
+    results["steps"].append({"step": "geocode", "assets_geocoded": len(geocoded_assets)})
 
-        for block in response.content:
-            if block.type == "text":
-                console.print(f"\n[white]{block.text}[/white]")
-                assistant_content.append({"type": "text", "text": block.text})
+    # -------------------------------------------------------------------------
+    # Step 3: Flood risk per asset
+    # -------------------------------------------------------------------------
+    console.print("\n[cyan]Step 3/7 — Assessing flood risk...[/cyan]")
+    flood_risks = []
 
-            elif block.type == "tool_use":
-                tool_name = block.name
-                tool_input = block.input
-                tool_id = block.id
+    for asset in geocoded_assets:
+        if asset.latitude is None or asset.longitude is None:
+            continue
+        risk = assess_flood_risk(
+            FloodRiskInput(
+                latitude=asset.latitude,
+                longitude=asset.longitude,
+                asset_name=asset.name,
+            )
+        )
+        flood_risks.append(risk)
+        console.print(
+            f"  {asset.name}: [bold]{risk.risk_level}[/bold] "
+            f"(RP100={risk.depths.rp100}m)"
+        )
 
-                console.print(f"\n[yellow]🔧 Tool: {tool_name}[/yellow]")
-                console.print(f"[dim]{json.dumps(tool_input, indent=2)}[/dim]")
+    results["steps"].append({
+        "step": "flood_risk",
+        "assessments": [r.model_dump() for r in flood_risks],
+    })
 
-                assistant_content.append({
-                    "type": "tool_use",
-                    "id": tool_id,
-                    "name": tool_name,
-                    "input": tool_input,
-                })
+    # -------------------------------------------------------------------------
+    # Step 4: Biodiversity check per asset
+    # -------------------------------------------------------------------------
+    console.print("\n[cyan]Step 4/7 — Checking protected area proximity...[/cyan]")
+    biodiversity_results = []
 
-                # Execute tool
-                if dry_run:
-                    result = {"status": "dry_run", "input": tool_input}
-                elif tool_name in TOOLS:
-                    try:
-                        result = TOOLS[tool_name](tool_input)
-                    except Exception as e:
-                        result = {"error": str(e)}
-                else:
-                    result = {"error": f"Unknown tool: {tool_name}"}
+    for asset in geocoded_assets:
+        if asset.latitude is None or asset.longitude is None:
+            continue
+        bio = check_biodiversity(
+            BiodiversityInput(
+                latitude=asset.latitude,
+                longitude=asset.longitude,
+                asset_name=asset.name,
+            )
+        )
+        biodiversity_results.append(bio)
+        flag = "[red]FLAG[/red]" if bio.risk_flag else "[green]OK[/green]"
+        console.print(
+            f"  {asset.name}: {flag} — {bio.nearest_protected_area} "
+            f"({bio.distance_km} km)"
+        )
 
-                console.print(f"[green]← Result:[/green] {json.dumps(result, indent=2, default=str)[:500]}...")
+    results["steps"].append({
+        "step": "biodiversity",
+        "assessments": [b.model_dump() for b in biodiversity_results],
+    })
 
-                collected_results["tool_calls"].append({
-                    "tool": tool_name,
-                    "input": tool_input,
-                    "result": result,
-                })
+    # -------------------------------------------------------------------------
+    # Step 5: Transition risk
+    # -------------------------------------------------------------------------
+    console.print("\n[cyan]Step 5/7 — Assessing transition risk...[/cyan]")
+    sector = doc.sector or "data centre"
+    transition = assess_transition_risk(TransitionRiskInput(sector=sector))
+    console.print(
+        f"  Sector: {transition.sector} → [bold]{transition.risk_level}[/bold] "
+        f"({transition.ngfs_scenario})"
+    )
 
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_id,
-                    "content": json.dumps(result, default=str),
-                })
+    results["steps"].append({
+        "step": "transition_risk",
+        "assessment": transition.model_dump(),
+    })
 
-        # Append assistant message and tool results
-        messages.append({"role": "assistant", "content": assistant_content})
-        if tool_results:
-            messages.append({"role": "user", "content": tool_results})
+    # -------------------------------------------------------------------------
+    # Step 6: Generate map
+    # -------------------------------------------------------------------------
+    console.print("\n[cyan]Step 6/7 — Generating interactive map...[/cyan]")
+    map_path = str(output_path / "map.html")
+    flood_dicts = [r.model_dump() for r in flood_risks]
+    map_result = generate_map(
+        MapInput(
+            assets=geocoded_assets,
+            flood_risks=flood_dicts,
+            flood_data=True,
+            output_path=map_path,
+        )
+    )
+    console.print(f"  Map saved → {map_result.map_path}")
 
-    collected_results["end_time"] = datetime.now().isoformat()
-    return collected_results
+    results["steps"].append({"step": "generate_map", "path": map_result.map_path})
+
+    # -------------------------------------------------------------------------
+    # Step 7: Generate report
+    # -------------------------------------------------------------------------
+    console.print("\n[cyan]Step 7/7 — Generating due diligence memo...[/cyan]")
+
+    esg_gaps = _identify_esg_gaps(doc.raw_text)
+    red_flags = _identify_red_flags(flood_risks, biodiversity_results, doc.raw_text)
+
+    deal_overview = {
+        "company_registration": doc.company_registration,
+        "headquarters": doc.headquarters,
+        "deal_type": doc.deal_type,
+        "valuation_myr": doc.valuation_myr,
+        "target_irr": doc.target_irr,
+        "financials": doc.financials.model_dump(),
+    }
+
+    report = generate_report(
+        ReportInput(
+            company_name=doc.company_name,
+            deal_overview=deal_overview,
+            assets=geocoded_assets,
+            flood_risks=flood_risks,
+            transition_risk=transition,
+            biodiversity=biodiversity_results,
+            esg_gaps=esg_gaps,
+            red_flags=red_flags,
+            output_format="html",
+            output_path=str(output_path / "memo"),
+        )
+    )
+    console.print(f"  Memo saved → {report.report_path}")
+
+    results["steps"].append({"step": "generate_report", "path": report.report_path})
+    results["end_time"] = datetime.now().isoformat()
+
+    console.print(
+        Panel.fit(
+            f"[green]Done![/green]  Memo: {report.report_path}  |  Map: {map_result.map_path}",
+            style="bold green",
+        )
+    )
+    return results
+
+
+def _identify_esg_gaps(raw_text: str) -> list[str]:
+    """Identify ESG disclosure gaps from document text."""
+    gaps = []
+    text_lower = raw_text.lower()
+
+    if "scope 2" not in text_lower and "scope2" not in text_lower:
+        gaps.append("Scope 2 emissions not disclosed")
+    if "scope 1" not in text_lower:
+        gaps.append("Scope 1 emissions not disclosed")
+    if "water" not in text_lower or "cooling" not in text_lower:
+        gaps.append("Water consumption / cooling methodology not quantified")
+    if "renewable" not in text_lower and "solar" not in text_lower:
+        gaps.append("No confirmed renewable energy procurement plan")
+    if "esg" not in text_lower and "sustainability" not in text_lower:
+        gaps.append("No standalone ESG policy referenced")
+
+    return gaps
+
+
+def _identify_red_flags(flood_risks, biodiversity_results, raw_text: str) -> list[str]:
+    """Compile red flags from risk assessments."""
+    flags = []
+
+    for risk in flood_risks:
+        if risk.risk_level in ("High", "Critical"):
+            flags.append(
+                f"{risk.asset_name}: {risk.risk_level} flood risk "
+                f"(RP100 depth = {risk.depths.rp100}m)"
+            )
+
+    for bio in biodiversity_results:
+        if bio.risk_flag:
+            flags.append(
+                f"{bio.asset_name}: {bio.distance_km} km from "
+                f"{bio.nearest_protected_area} ({bio.protected_area_type})"
+            )
+
+    text_lower = raw_text.lower()
+    if "fossil" in text_lower or "tnb" in text_lower:
+        flags.append("Power supply dependent on fossil-fuel-heavy national grid (TNB ~60% fossil)")
+    if "under construction" in text_lower or "phase 2" in text_lower:
+        flags.append("Phase 2 construction not yet complete — execution risk on capacity expansion")
+
+    return flags
 
 
 def main():
@@ -293,20 +273,16 @@ def main():
     parser = argparse.ArgumentParser(description="CADI Agent")
     parser.add_argument("--input", "-i", required=True, help="Path to deal PDF")
     parser.add_argument("--output", "-o", default="output/", help="Output directory")
-    parser.add_argument("--dry-run", action="store_true", help="Don't execute tools")
     args = parser.parse_args()
 
-    results = run_agent(args.input, args.output, args.dry_run)
+    results = run_agent(args.input, args.output)
 
-    # Save results
     output_path = Path(args.output)
-    output_path.mkdir(parents=True, exist_ok=True)
-
     results_file = output_path / "agent_results.json"
     with open(results_file, "w") as f:
         json.dump(results, f, indent=2, default=str)
 
-    console.print(f"\n[green]Results saved to {results_file}[/green]")
+    console.print(f"\n[dim]Full results → {results_file}[/dim]")
 
 
 if __name__ == "__main__":
