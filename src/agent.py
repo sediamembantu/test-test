@@ -24,6 +24,7 @@ from .schemas import (
     ReportInput,
     TransitionRiskInput,
 )
+from .report import generate_report
 from .tools import (
     assess_flood_risk,
     assess_transition_risk,
@@ -172,7 +173,7 @@ TOOLS: dict[str, callable] = {
     "assess_transition_risk": lambda args: assess_transition_risk(TransitionRiskInput(**args)).model_dump(),
     "check_biodiversity": lambda args: check_biodiversity(BiodiversityInput(**args)).model_dump(),
     "generate_map": lambda args: generate_map(MapInput(**args)).model_dump(),
-    # "generate_report": lambda args: ...  # Special handling
+    "generate_report": lambda args: generate_report(ReportInput(**args)).model_dump(),
 }
 
 

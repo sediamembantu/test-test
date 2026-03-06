@@ -32,3 +32,5 @@ pytest-cov>=4.1.0
 # Utilities
 python-dotenv>=1.0.0
 rich>=13.0.0  # Pretty terminal output for demo
+requests>=2.31.0
+markdown>=3.5.0
