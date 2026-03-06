@@ -1,25 +1,26 @@
 # Climate-Aware Deal Intelligence (CADI)
 
-## Agentic Due Diligence Pipeline for EPF Private Markets
+## Due Diligence Pipeline for EPF Private Markets
 
-**Purpose:** Demo-ready prototype for EPF Centre of Excellence for Analytics interview. Demonstrates how data science + agentic AI can transform private market due diligence with integrated climate risk assessment.
+**Purpose:** Demo-ready prototype for EPF Centre of Excellence for Analytics interview. Demonstrates how data science + AI can transform private market due diligence with integrated climate risk assessment.
 
 **Not for production.** Designed to run reliably for a 2-minute screen-recorded demo.
+
+**No Anthropic API key required.** Pipeline uses regex extraction and hardcoded fallbacks throughout.
 
 ---
 
 ## 1. What It Does
 
-Takes a fictional private equity deal document (PDF), runs an agentic pipeline that:
+Takes a fictional private equity deal document (PDF), runs a fixed 7-step pipeline:
 
-1. Parses and extracts key entities (company, assets, locations, financials)
-2. Geocodes physical asset locations
-3. Assesses climate/flood risk per asset using open geospatial data
-4. Scores transition risk by sector using NGFS scenarios
-5. Generates a structured due diligence memo with embedded interactive map
-6. Flags ESG gaps and red flags
-
-The agent decides which tools to call based on document content — not a fixed script. If no physical assets are found, it skips the climate layer. This is what makes it genuinely agentic.
+1. Parses and extracts key entities (company, assets, locations, financials) via regex + pymupdf
+2. Geocodes physical asset locations (Nominatim + hardcoded fallbacks)
+3. Assesses flood risk per asset using JRC data (location-based fallback when rasters absent)
+4. Checks proximity to protected areas using WDPA (hardcoded fallback when data absent)
+5. Scores transition risk by sector using NGFS scenarios (inline lookup)
+6. Generates an interactive Folium map
+7. Produces a structured due diligence memo (HTML + Markdown)
 
 ---
 
@@ -505,3 +506,100 @@ Demo prototype for EPF interview. Agentic pipeline: deal PDF → entity extracti
 - Geocoding has hardcoded fallbacks — demo must never fail on API timeout.
 - JRC rasters are pre-clipped to Peninsular Malaysia only.
 ```
+
+---
+
+## 15. GLM Task Breakdown — G5–G7 (Vercel Web Layer)
+
+These tasks implement the Vercel demo described in Section 14.
+**Prerequisite:** Section 14 fully read before starting. Branch: `claude/check-progress-9GSr5`.
+
+---
+
+### G5 — Slim requirements + FastAPI SSE backend
+
+**File:** `api/index.py`
+**File:** `requirements-web.txt`
+
+Create `requirements-web.txt` with only what the web layer needs (no rasterio/geopandas):
+
+```
+fastapi
+uvicorn
+sse-starlette
+pymupdf
+folium
+shapely
+pydantic>=2.0.0
+jinja2
+requests
+markdown
+python-multipart
+fpdf2
+```
+
+Create `api/index.py` — FastAPI app with one SSE endpoint:
+
+```python
+GET /api/run
+```
+
+- Streams pipeline steps as SSE events using `sse-starlette`
+- Each event: `{"step": 3, "total": 7, "message": "Flood risk: Kulai HIGH ⚠️", "done": false}`
+- Final event includes: `{"done": true, "map_html": "<folium html...>", "memo_html": "<memo html...>"}`
+- Uses the existing `src/` pipeline internally — import and call `run_agent_sse()` variant
+- PDF is pre-bundled at `data/deal/nusantara_digital.pdf` — no upload needed
+
+**Important:** The SSE variant of the pipeline must `yield` step events rather than using `rich` console output. Add a `run_agent_sse()` generator function to `src/agent.py` alongside the existing `run_agent()`.
+
+---
+
+### G6 — Vercel config + routing
+
+**File:** `vercel.json`
+
+```json
+{
+  "builds": [
+    { "src": "api/index.py", "use": "@vercel/python" },
+    { "src": "web/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "api/index.py" },
+    { "src": "/(.*)", "dest": "web/$1" }
+  ]
+}
+```
+
+Ensure `web/` is served as static files and `api/` routes to Python.
+
+---
+
+### G7 — Frontend UI
+
+**File:** `web/index.html`
+
+Single-file plain HTML/JS — no framework, no build step. Sections:
+
+1. **Header:** "CADI — Climate-Aware Deal Intelligence" + subtitle
+2. **Run button:** "Analyse Nusantara Digital" → calls `GET /api/run` via EventSource
+3. **Terminal log panel:** Steps stream in one by one with icons (✓ / ⚠ / spinner)
+   - Each SSE event appends a line
+   - Auto-scrolls to bottom
+4. **Results tabs** (hidden until stream completes):
+   - **Map** tab: `<iframe>` containing the folium HTML (injected via `srcdoc`)
+   - **Memo** tab: `<div>` with memo HTML injected directly
+5. **Styling:** Dark terminal panel for logs, clean white card for results. No external CSS frameworks — inline `<style>` only.
+
+**UX requirement:** Results tabs must only appear after `done: true` event received. Map iframe height: 500px. Memo div should be scrollable with max-height.
+
+---
+
+### G5–G7 Acceptance Criteria
+
+- [ ] `vercel --prod` deploys without error
+- [ ] Clicking "Analyse" streams all 7 steps visibly
+- [ ] Map tab shows Kulai (red marker) and Cyberjaya (green marker)
+- [ ] Memo tab shows company name, risk table, ESG gaps, red flags
+- [ ] Page works on mobile (basic responsive)
+- [ ] No console errors in browser
