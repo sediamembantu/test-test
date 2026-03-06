@@ -40,8 +40,10 @@ data/wdpa/*.shp
 # Output
 output/*.docx
 output/*.html
+output/*.md
 output/*.pdf
 output/*.png
+output/*.json
 
 # Logs
 *.log
