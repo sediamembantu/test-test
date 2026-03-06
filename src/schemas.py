@@ -199,6 +199,7 @@ class MapInput(BaseModel):
     """Input for generate_map tool."""
 
     assets: list[Asset] = Field(..., description="Assets to plot")
+    flood_risks: list[dict] = Field(default_factory=list, description="Flood risk data for coloring markers")
     flood_data: bool = Field(True, description="Include flood risk overlay")
     output_path: str = Field("output/map.html", description="Output HTML path")
 
