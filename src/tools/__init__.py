@@ -6,6 +6,7 @@ from .flood_risk import assess_flood_risk
 from .transition import assess_transition_risk
 from .biodiversity import check_biodiversity
 from .mapping import generate_map
+from .ifrs9_classifier import classify_loan, classify_portfolio
 
 __all__ = [
     "parse_document",
@@ -15,4 +16,6 @@ __all__ = [
     "assess_transition_risk",
     "check_biodiversity",
     "generate_map",
+    "classify_loan",
+    "classify_portfolio",
 ]
